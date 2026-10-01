@@ -713,7 +713,7 @@ test('the extra-usage tag is drawn and never pushes a TUI row past the edge', as
       Object.defineProperty(process.stdout, 'rows', { value: 40, configurable: true });
       const drawn = [];
       const real = tui._renderAcct.bind(tui);
-      tui._renderAcct = (...args) => { const out = real(...args); drawn.push(strip(out)); return out; };
+      tui._renderAcct = (...args) => { const out = real(...args); drawn.push(...[out].flat().map(strip)); return out; };
       tui._paint = () => {};
       tui.running = true;
       tui.render(true);
