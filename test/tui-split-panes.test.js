@@ -49,7 +49,8 @@ function screen(am, width, { remote = false } = {}) {
     tui._renderRow = (idx, L, current) => {
       const out = real(idx, L, current);
       const b = L.budgets.get(rowCategoryOf(am.accounts[idx]));
-      drawn.push({ idx, pane: L.compact, width: L.width, nameW: L.nameW, bw: b.bw, text: strip(out) });
+      // A row folded below 70 columns is several lines: each is held to the width.
+      for (const line of [out].flat()) drawn.push({ idx, pane: L.compact, width: L.width, nameW: L.nameW, bw: b.bw, text: strip(line) });
       return out;
     };
     tui._paint = (b) => { buf = b; };

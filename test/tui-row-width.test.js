@@ -64,7 +64,7 @@ function renderRows(width, { fable = [], sonnet = [], accounts = 6, routes = [],
     // Capture the arguments render() actually passes, so the test can never
     // diverge from the layout decisions under test.
     const real = tui._renderAcct.bind(tui);
-    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(strip(out)); return out; };
+    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(...[out].flat().map(strip)); return out; };
     tui._paint = () => {};
     tui.running = true;
     tui.render(true);
@@ -296,7 +296,7 @@ test('a subscription account with no reading yet draws its own bars, empty', () 
   const drawn = [];
   try {
     const real = tui._renderAcct.bind(tui);
-    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(strip(out)); return out; };
+    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(...[out].flat().map(strip)); return out; };
     tui._paint = () => {};
     tui.running = true;
     tui.render(true);

@@ -207,7 +207,7 @@ function renderRows(width, spends, caps = []) {
   const drawn = [];
   try {
     const real = tui._renderAcct.bind(tui);
-    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(strip(out)); return out; };
+    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(...[out].flat().map(strip)); return out; };
     tui._paint = () => {};
     tui.running = true;
     tui.render(true);
