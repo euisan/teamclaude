@@ -42,7 +42,7 @@ function renderRows(width, names) {
     // Capture what render() actually passed, so the test cannot drift from the
     // layout decisions under test.
     const real = tui._renderAcct.bind(tui);
-    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(strip(out)); return out; };
+    tui._renderAcct = (...args) => { const out = real(...args); drawn.push(...[out].flat().map(strip)); return out; };
     tui._paint = () => {};
     tui.running = true;
     tui.render(true);
@@ -69,8 +69,11 @@ const PLAIN_NAME = 'ascii@example.com';
 const WIDTHS = [...Array(101).keys()].map(i => i + 55).concat([140, 160, 200]);
 
 test('a name measured in columns keeps every row the same width', () => {
+  // Below 70 columns an account folds into a heading and its bar lines, so the
+  // rows that must line up there are the headings — every third line here.
   for (const w of WIDTHS) {
-    const rows = renderRows(w, [WIDE_NAME, COMBINING_NAME, PLAIN_NAME]);
+    const drawn = renderRows(w, [WIDE_NAME, COMBINING_NAME, PLAIN_NAME]);
+    const rows = w < 70 ? drawn.filter((_, i) => i % 3 === 0) : drawn;
     const widths = rows.map(displayWidth);
     assert.equal(new Set(widths).size, 1,
       `W=${w}: rows should all be one width, got ${widths.join(', ')}`);

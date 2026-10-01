@@ -1,0 +1,144 @@
+Narrow-terminal usage bars: real TUI paint, captured through a pty.
+
+How: each frame is TUI.start() itself (alternate screen, raw stdin, the real
+_paint to process.stdout) run under `script -q -e -c "stty cols W rows 24; node live.mjs"`,
+against an in-memory fleet (test-helpers/tui-frame.js fleetAccounts) with a
+temporary HOME and no config file, server or token. The last painted frame
+before stop() is extracted from the typescript and its ANSI codes stripped;
+"|" marks column 0 and the column past the last. The widest line of every
+frame is exactly the terminal width.
+
+Below 70 columns each account folds into a heading and one line per quota
+bar, every bar ending two columns before the right edge. 80 columns is the
+unchanged wide layout, for comparison.
+
+== stty cols 30 rows 24 — real TUI.start() paint, 24 lines, widest 30 columns
+| TeamClaude       Port 3456 ▲ |
+| ──────────────────────────── |
+|                              |
+|  ► alice@exa Anthropic active|
+|    Ses      42% · 4h1m       |
+|    Wk        31% · 2d        |
+|   ►S7        20% · 3d        |
+|    F7        99% · 3d        |
+|    ⊘ Fable  xu               |
+|    가나다라  Anthropic active|
+|    Ses     75% · 1h31m       |
+|    Wk        60% · 5d        |
+|  ► metered-k Anthropic active|
+|    Tok      40% · 1h1m       |
+|    Req      30% · 1h1m       |
+|    codex@example Codex active|
+|    Wk        50% · 6d        |
+|                              |
+| Activity ────────────────────|
+|                              |
+|                              |
+|                              |
+| ──────────────────────────── |
+| switch  disable  probe quota |
+
+== stty cols 40 rows 24 — real TUI.start() paint, 24 lines, widest 40 columns
+| TeamClaude                 Port 3456 ▲ |
+| ────────────────────────────────────── |
+|                                        |
+|  ► alice@example.com   Anthropic active|
+|    Ses           42% · 4h1m            |
+|    Wk             31% · 2d             |
+|   ►S7             20% · 3d             |
+|    F7             99% · 3d             |
+|    ⊘ Fable  xu                         |
+|    가나다라마바사-wide Anthropic active|
+|    Ses          75% · 1h31m            |
+|    Wk             60% · 5d             |
+|  ► metered-key         Anthropic active|
+|    Tok           40% · 1h1m            |
+|    Req           30% · 1h1m            |
+|    codex@example.com       Codex active|
+|    Wk             50% · 6d             |
+|                                        |
+| Activity ──────────────────────────────|
+|                                        |
+|                                        |
+|                                        |
+| ────────────────────────────────────── |
+| switch  disable  probe quota  Reload  g|
+
+== stty cols 50 rows 24 — real TUI.start() paint, 24 lines, widest 50 columns
+| TeamClaude                           Port 3456 ▲ |
+| ──────────────────────────────────────────────── |
+|                                                  |
+|  ► alice@example.com             Anthropic active|
+|    Ses                42% · 4h1m                 |
+|    Wk                  31% · 2d                  |
+|   ►S7                  20% · 3d                  |
+|    F7                  99% · 3d                  |
+|    ⊘ Fable  xu                                   |
+|    가나다라마바사-wide@example.t Anthropic active|
+|    Ses               75% · 1h31m                 |
+|    Wk                  60% · 5d                  |
+|  ► metered-key                   Anthropic active|
+|    Tok                40% · 1h1m                 |
+|    Req                30% · 1h1m                 |
+|    codex@example.com                 Codex active|
+|    Wk                  50% · 6d                  |
+|                                                  |
+| Activity ────────────────────────────────────────|
+|                                                  |
+|                                                  |
+|                                                  |
+| ──────────────────────────────────────────────── |
+| switch  disable  probe quota  Reload  g settings |
+
+== stty cols 69 rows 24 — real TUI.start() paint, 24 lines, widest 69 columns
+| TeamClaude                                              Port 3456 ▲ |
+| ─────────────────────────────────────────────────────────────────── |
+|                                                                     |
+|  ► alice@example.com                                Anthropic active|
+|    Ses                         42% · 4h1m                           |
+|    Wk                           31% · 2d                            |
+|   ►S7                           20% · 3d                            |
+|    F7                           99% · 3d                            |
+|    ⊘ Fable  xu                                                      |
+|    가나다라마바사-wide@example.test                 Anthropic active|
+|    Ses                         75% · 1h31m                          |
+|    Wk                           60% · 5d                            |
+|  ► metered-key                                      Anthropic active|
+|    Tok                         40% · 1h1m                           |
+|    Req                         30% · 1h1m                           |
+|    codex@example.com                                    Codex active|
+|    Wk                           50% · 6d                            |
+|                                                                     |
+| Activity ───────────────────────────────────────────────────────────|
+|                                                                     |
+|                                                                     |
+|                                                                     |
+| ─────────────────────────────────────────────────────────────────── |
+| switch  disable  probe quota  Reload  g settings  quit              |
+
+== stty cols 80 rows 24 — real TUI.start() paint, 24 lines, widest 80 columns
+| TeamClaude                                                         Port 3456 ▲ |
+| ────────────────────────────────────────────────────────────────────────────── |
+|                                                                                |
+|  ► alice@exampl Anthropic active     Ses   4h1m     Wk  31% · 2d   ⊘ Fable  xu |
+|    가나다라마바 Anthropic active     Ses   1h31m    Wk  60% · 5d               |
+|  ► metered-key  Anthropic active     Tok    40% · 1h1m     Req    30% · 1h1m   |
+|    codex@exampl Codex     active     Wk          50% · 6d                      |
+|                                                                                |
+| Activity ──────────────────────────────────────────────────────────────────────|
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ────────────────────────────────────────────────────────────────────────────── |
+| switch  disable  probe quota  Reload  g settings  quit                         |
+
