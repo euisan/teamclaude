@@ -39,12 +39,12 @@ test('below 70 columns each account folds into a heading and one line per quota 
   for (const w of NARROW) {
     const { accounts } = folded(w);
     assert.ok(accounts.every(Array.isArray), `W=${w}: every account is folded`);
-    const [alice, korean, metered, codex] = accounts;
+    const [alice, wide, metered, codex] = accounts;
     assert.match(strip(alice[0]), /^ {2}► alice@exa\S* +Anthropic active$/);
     assert.deepEqual(alice.slice(1, 5).map(labelOf), ['Ses', 'Wk', 'S7', 'F7'], `W=${w}: both family bars are kept`);
     assert.match(strip(alice[5]), /^ {4}⊘ Fable {2}xu *$/, `W=${w}: the tags follow the bars`);
     assert.equal(alice.length, 6);
-    assert.deepEqual(korean.slice(1).map(labelOf), ['Ses', 'Wk'], `W=${w}: the weekly bar is no longer dropped`);
+    assert.deepEqual(wide.slice(1).map(labelOf), ['Ses', 'Wk'], `W=${w}: the weekly bar is no longer dropped`);
     assert.deepEqual(metered.slice(1).map(labelOf), ['Tok', 'Req']);
     // A Codex seat that states no five-hour window draws its weekly bar alone,
     // as it does wide, rather than an empty `Ses -`.
@@ -90,11 +90,13 @@ test('the folded heading spends what the type and status leave on the name, in d
       assert.equal(displayWidth(strip(heading).trimEnd()), w, `W=${w}: ${strip(heading)}`);
     }
   }
-  // Ten Hangul syllables are twenty columns, not ten: the name is cut where it
-  // reaches the type column, never past it.
-  assert.match(strip(folded(40).accounts[1][0]), /^ {4}홍길동-업무용-계정@ Anthropic active$/);
-  assert.match(strip(folded(30).accounts[1][0]), /^ {4}홍길동-업 Anthropic active$/);
-  assert.match(strip(folded(69).accounts[1][0]), /^ {4}홍길동-업무용-계정@예시\.한국 +Anthropic active$/);
+  // Seven Hangul syllables are fourteen columns, not seven: the name is cut
+  // where it reaches the type column, never past it. At 30 columns the name
+  // has nine: a fifth syllable would straddle the edge, so it is dropped whole
+  // and its leftover column padded.
+  assert.match(strip(folded(40).accounts[1][0]), /^ {4}가나다라마바사-wide Anthropic active$/);
+  assert.match(strip(folded(30).accounts[1][0]), /^ {4}가나다라 {2}Anthropic active$/);
+  assert.match(strip(folded(69).accounts[1][0]), /^ {4}가나다라마바사-wide@example\.test +Anthropic active$/);
 });
 
 test('every folded bar keeps its whole percentage and countdown', () => {
@@ -137,6 +139,6 @@ test('the real paint writes the folded frame to the terminal', () => {
 
 test('the selected account keeps its cursor when folded', () => {
   const { accounts } = folded(40, { mode: 'select', selIdx: 1 });
-  assert.match(strip(accounts[1][0]), /^ > {2}홍길동/);
+  assert.match(strip(accounts[1][0]), /^ > {2}가나다라/);
   assert.equal(displayWidth(strip(accounts[1][0]).trimEnd()), 40);
 });

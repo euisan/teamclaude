@@ -22,7 +22,7 @@ unchanged wide layout, for comparison.
 |   ►S7        20% · 3d        |
 |    F7        99% · 3d        |
 |    ⊘ Fable  xu               |
-|    홍길동-업 Anthropic active|
+|    가나다라  Anthropic active|
 |    Ses     75% · 1h31m       |
 |    Wk        60% · 5d        |
 |  ► metered-k Anthropic active|
@@ -48,7 +48,7 @@ unchanged wide layout, for comparison.
 |   ►S7             20% · 3d             |
 |    F7             99% · 3d             |
 |    ⊘ Fable  xu                         |
-|    홍길동-업무용-계정@ Anthropic active|
+|    가나다라마바사-wide Anthropic active|
 |    Ses          75% · 1h31m            |
 |    Wk             60% · 5d             |
 |  ► metered-key         Anthropic active|
@@ -74,7 +74,7 @@ unchanged wide layout, for comparison.
 |   ►S7                  20% · 3d                  |
 |    F7                  99% · 3d                  |
 |    ⊘ Fable  xu                                   |
-|    홍길동-업무용-계정@예시.한국  Anthropic active|
+|    가나다라마바사-wide@example.t Anthropic active|
 |    Ses               75% · 1h31m                 |
 |    Wk                  60% · 5d                  |
 |  ► metered-key                   Anthropic active|
@@ -100,7 +100,7 @@ unchanged wide layout, for comparison.
 |   ►S7                           20% · 3d                            |
 |    F7                           99% · 3d                            |
 |    ⊘ Fable  xu                                                      |
-|    홍길동-업무용-계정@예시.한국                     Anthropic active|
+|    가나다라마바사-wide@example.test                 Anthropic active|
 |    Ses                         75% · 1h31m                          |
 |    Wk                           60% · 5d                            |
 |  ► metered-key                                      Anthropic active|
@@ -121,7 +121,7 @@ unchanged wide layout, for comparison.
 | ────────────────────────────────────────────────────────────────────────────── |
 |                                                                                |
 |  ► alice@exampl Anthropic active     Ses   4h1m     Wk  31% · 2d   ⊘ Fable  xu |
-|    홍길동-업무  Anthropic active     Ses   1h31m    Wk  60% · 5d               |
+|    가나다라마바 Anthropic active     Ses   1h31m    Wk  60% · 5d               |
 |  ► metered-key  Anthropic active     Tok    40% · 1h1m     Req    30% · 1h1m   |
 |    codex@exampl Codex     active     Wk          50% · 6d                      |
 |                                                                                |

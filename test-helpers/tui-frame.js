@@ -15,26 +15,27 @@ export const NOW = 1790899200000;
 const h = 3600_000;
 
 /** The fleet every frame draws: a Claude seat with both family buckets (one
- *  blocked) and extra usage allowed, a Claude seat with a long Korean name, a
+ *  blocked) and extra usage allowed, a Claude seat whose long name starts
+ *  with double-width (Hangul) characters, a
  *  metered API key, and a Codex seat that states no five-hour window. */
 export function fleetAccounts() {
   return [
     { name: 'alice@example.com', type: 'oauth', accessToken: 't-a', refreshToken: 'r', expiresAt: NOW + h, allowExtraUsage: true },
-    { name: '홍길동-업무용-계정@예시.한국', type: 'oauth', accessToken: 't-k', refreshToken: 'r', expiresAt: NOW + h },
+    { name: '가나다라마바사-wide@example.test', type: 'oauth', accessToken: 't-k', refreshToken: 'r', expiresAt: NOW + h },
     { name: 'metered-key', type: 'apikey', apiKey: 'k-m' },
     { name: 'codex@example.com', type: 'oauth', provider: 'codex', accountId: 'acct-c', accessToken: 'c-c', refreshToken: 'r', expiresAt: NOW + h },
   ];
 }
 
 function fill(/** @type {any} */ am) {
-  const [alice, korean, metered, codex] = am.accounts;
+  const [alice, wide, metered, codex] = am.accounts;
   Object.assign(alice.quota, {
     unified5h: 0.42, unified5hReset: NOW + 4 * h,
     unified7d: 0.31, unified7dReset: NOW + 2 * 24 * h,
     unified7dSonnet: 0.2, unified7dSonnetReset: NOW + 3 * 24 * h,
     unified7dFable: 0.99, unified7dFableReset: NOW + 3 * 24 * h,
   });
-  Object.assign(korean.quota, {
+  Object.assign(wide.quota, {
     unified5h: 0.75, unified5hReset: NOW + 90 * 60_000,
     unified7d: 0.6, unified7dReset: NOW + 5 * 24 * h,
   });
