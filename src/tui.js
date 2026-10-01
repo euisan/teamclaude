@@ -223,8 +223,22 @@ const PANE_GUTTER = ' │ ';
 // hundreds of blank columns.
 const PANE_BAR_FLOOR = 8;
 // The narrowest a list draws both shared bars in, full width and in a pane.
+// Below LIST_MIN the full-width list stops squeezing an account into one row:
+// it folds each account into a heading line and one line per quota bar (see
+// _renderAcct's `narrow`), the layout a phone-sized terminal needs.
 const LIST_MIN = 70;
 const PANE_MIN = 62;
+// The narrowest terminal drawn at all. The folded layout exists to rescue a
+// phone-width terminal, so refusing one at 40 columns would make it
+// unreachable exactly where it is needed.
+const SCREEN_MIN_W = 30;
+const SCREEN_MIN_H = 8;
+// A folded bar line: four columns of indent, the three-column label and a
+// space, then the bar.
+const NARROW_GAUGE_LEAD = 8;
+/** Columns a folded quota bar keeps clear of the right edge, so on a phone the
+ *  bar does not run into the screen border. */
+export const COMPACT_BAR_RIGHT_MARGIN = 2;
 
 // Clear space the centred version label needs on each side before it is drawn
 // at all. Below that it reads as a collision with the title or the port block,
@@ -2095,8 +2109,8 @@ export class TUI {
     const W = process.stdout.columns || 80;
     const H = process.stdout.rows || 24;
 
-    if (W < 40 || H < 8) {
-      this._paint(`${ESC}H${ESC}2JTerminal too small (need 40x8+)\r\n`, force);
+    if (W < SCREEN_MIN_W || H < SCREEN_MIN_H) {
+      this._paint(`${ESC}H${ESC}2JTerminal too small (need ${SCREEN_MIN_W}x${SCREEN_MIN_H}+)\r\n`, force);
       return;
     }
 
@@ -2189,7 +2203,8 @@ export class TUI {
         lines.push('');
         const order = this._displayOrder();
         const layout = this._listLayout(order, W);
-        for (const i of order) lines.push(this._renderRow(i, layout, current));
+        // A folded (narrow) row is several lines; a wide one is one.
+        for (const i of order) lines.push(...[this._renderRow(i, layout, current)].flat());
       }
     }
 
@@ -2405,6 +2420,7 @@ export class TUI {
     };
     return {
       routes, genRoutes, budgets, nameW, familyTarget, compact: pane != null, width: W,
+      narrow: pane == null && W < LIST_MIN,
       complete: all.every(b => b.complete),
       stages: [0, 1, 2].map(k => Math.max(...all.map(b => b.stages[k]))),
     };
@@ -2413,7 +2429,7 @@ export class TUI {
   /** Draw one row against a layout from _listLayout. */
   _renderRow(/** @type {number} */ idx, /** @type {any} */ L, /** @type {Set<number>} */ current) {
     const b = L.budgets.get(rowCategory(this.am.accounts[idx]));
-    return this._renderAcct(idx, b.bw, b.showBoth, L.routes, L.genRoutes, L.familyTarget, b.showFamily, L.nameW, { current, compact: L.compact, shortBar: b.shortBar });
+    return this._renderAcct(idx, b.bw, b.showBoth, L.routes, L.genRoutes, L.familyTarget, b.showFamily, L.nameW, { current, compact: L.compact, shortBar: b.shortBar, narrow: L.narrow ? L.width : 0 });
   }
 
   /** The accounts of each provider present, in the order its rows are drawn. */
@@ -2539,7 +2555,13 @@ export class TUI {
     return rows;
   }
 
-  _renderAcct(idx, bw, showBoth, routes = this.am.getRoutes(), genRoutes = routes.filter(r => routeFamily(r) === null), familyTarget = {}, showFamily = true, nameW = NAME_MIN, { current = this._currentRows(), compact = false, shortBar = true } = {}) {
+  /** One account row. `narrow`, when set, is the terminal width of a list
+   *  folded below LIST_MIN: the row is then returned as several lines (heading,
+   *  one line per quota bar, tags) instead of one. */
+  _renderAcct(idx, bw, showBoth, routes = this.am.getRoutes(), genRoutes = routes.filter(r => routeFamily(r) === null), familyTarget = {}, showFamily = true, nameW = NAME_MIN, { current = this._currentRows(), compact = false, shortBar = true, narrow = 0 } = {}) {
+    // A folded row gives every bar a line of its own, so none has to be
+    // dropped for width.
+    if (narrow) { showBoth = true; showFamily = true; }
     const a = this.am.accounts[idx];
     const isCur = current.has(idx);
     const isSel = this.mode === 'select' && idx === this.selIdx;
@@ -2602,7 +2624,8 @@ export class TUI {
     // truncated and a single-provider pool keeps the column it has today.
     // A pane draws no type cell: its title names the provider.
     const { mixed, width: typeW } = typeColumn(this.am.accounts);
-    const type = compact ? '' : `${gray((mixed ? PROVIDERS[providerOf(a)].label : a.type).padEnd(typeW))} `;
+    const typeLabel = mixed ? PROVIDERS[providerOf(a)].label : a.type;
+    const type = compact ? '' : `${gray(typeLabel.padEnd(typeW))} `;
 
     // Status — a disabled account is shown as such regardless of its quota state.
     // So is one rotation will not reach although its own status says active: the
@@ -2629,6 +2652,8 @@ export class TUI {
       case 'error':     status = red('error'); break;
       default:          status = a.status || 'ready';
     }
+    // The folded heading has no column to line up with, so it keeps the label unpadded.
+    const narrowStatus = status;
     status = rpad(status, 10);
 
     // Quota ratios — prefer unified (Claude Max), fall back to standard (API key)
@@ -2694,6 +2719,82 @@ export class TUI {
     // without a config, and it read none before this line existed.
     const pctInBar = this.config?.quotaBarPercent === true;
 
+    // The tags that trail the bars, in the order they are drawn.
+    /** @type {string[]} */
+    const tags = [];
+    // Explicit "disabled for these models" tag (issue #85): a family the account
+    // can't serve even while it is otherwise active. A spent shared 5h blocks
+    // everything and is already conveyed by the Ses bar + status, so it's not
+    // repeated here.
+    //
+    // limFor, not thresholdFor: it is min(per-bucket threshold, per-account cap),
+    // so the tag covers both ceilings and still judges each family against its
+    // OWN configured threshold.
+    const blocked = blockedFamilies(q, limFor);
+    if (blocked.length) tags.push(red('⊘ ' + blocked.join(' ')));
+    // Money tag last, so it sits at the end of the row where the eye lands after
+    // the bars. Red once real money has moved, yellow while it only could.
+    const money = spendTag(q, a.maxSpend);
+    // Red once real money has moved (the tag then carries an amount), yellow
+    // while it only could (a bare `$`, with or without its `/cap`).
+    if (money) tags.push((/\d/.test(money.split('/')[0]) ? red : yellow)(money));
+    // Extra-usage fallback: allowed reads yellow like a bare `$`; serving on
+    // it is billing now, so red like a billed amount.
+    const xu = extraUsageTag(a.allowExtraUsage === true, this._onExtraUsage(a));
+    if (xu) tags.push((xu === 'xu!' ? red : yellow)(xu));
+    // Free reset credits sit beside the money tag: both report what this
+    // account holds in reserve rather than what it is currently spending.
+    const credits = resetCreditTag(q);
+    if (credits) tags.push(cyan(credits));
+    // Switch-threshold tag (issue #409) trails everything else: it is a config
+    // fact about the account, not a live state like the two tags above it, and
+    // it is silent for the common case (no override, or one that just repeats
+    // the fleet's own numbers) — see switchThresholdTag.
+    const switchTag = switchThresholdTag(a, key => this.am.thresholdFor(key));
+    if (switchTag) tags.push(cyan(switchTag));
+    // Routing tag trails even that: where the account's traffic physically
+    // leaves the machine, when the operator pinned it to its own proxy.
+    const routeTag = routingTag(a);
+    if (routeTag) tags.push(cyan(routeTag));
+
+    if (narrow) {
+      // Folded below LIST_MIN. The heading spends whatever the marker, type
+      // and status leave on the name, measured in display columns so a wide
+      // (CJK) name is cut where it actually reaches the edge.
+      const W = narrow;
+      const head = ` ${sel}${cur} ${startSlot}`;
+      const typeText = gray(typeLabel);
+      const nameRoom = Math.max(1, W - vw(head) - 1 - vw(typeText) - 1 - vw(narrowStatus));
+      const fitName = rpad(truncate(a.name, nameRoom), nameRoom);
+      const out = [fitLine(`${head}${isSel ? bold(fitName) : fitName} ${typeText} ${narrowStatus}`, W)];
+      // Each bar owns its line, so it takes the whole width past its label,
+      // less the right margin.
+      const lw = Math.max(BAR_MIN, W - NARROW_GAUGE_LEAD - COMPACT_BAR_RIGHT_MARGIN);
+      const pad = ' '.repeat(NARROW_GAUGE_LEAD - 4);
+      // A row that draws no five-hour bar wide (see weeklyFirst/weeklyOnly)
+      // draws none folded either: the [l1..] swap above has put the weekly
+      // window in the first slot, so it is the only one drawn.
+      const sessionless = weeklyFirst || weeklyOnly;
+      out.push(`${pad}${l1} ${bar(r1, lw, t1, w1, th1, pctInBar)}`);
+      if (!sessionless) out.push(`${pad}${l2} ${bar(r2, lw, t2, w2, th2, pctInBar)}`);
+      if (q.unified7dSonnet != null) {
+        out.push(`  ${famLead('sonnet')}${familyMark('sonnet')}S7  ${bar(q.unified7dSonnet, lw, q.unified7dSonnetReset, SEVEN_DAY_MS, limFor('unified7dSonnet'), pctInBar)}`);
+      }
+      if (q.unified7dFable != null) {
+        out.push(`  ${famLead('fable')}${familyMark('fable')}F7  ${bar(q.unified7dFable, lw, q.unified7dFableReset, SEVEN_DAY_MS, limFor('unified7dFable'), pctInBar)}`);
+      }
+      // Tags wrap onto as many lines as they need, whole tags at a time; one
+      // too long for a line of its own is cut at the edge.
+      let tagLine = '';
+      for (const tag of tags) {
+        const cell = vw(tag) > W - 4 ? truncate(tag, W - 4) : tag;
+        if (tagLine && vw(tagLine) + 2 + vw(cell) > W) { out.push(tagLine); tagLine = ''; }
+        tagLine = tagLine ? `${tagLine}  ${cell}` : `${pad}${cell}`;
+      }
+      if (tagLine) out.push(tagLine);
+      return out;
+    }
+
     let line = ` ${sel}${cur} ${startSlot}${name} ${type}${status} ${l1} ${bar(r1, bw1, t1, w1, th1, pctInBar)}`;
     if (showBoth) {
       if (!weeklyFirst && !weeklyOnly) line += `  ${l2} ${bar(r2, bw, t2, w2, th2, pctInBar)}`;
@@ -2707,40 +2808,7 @@ export class TUI {
         line += `${famLead('fable')}${familyMark('fable')}F7  ${bar(q.unified7dFable, bw, q.unified7dFableReset, SEVEN_DAY_MS, limFor('unified7dFable'), pctInBar)}`;
       }
     }
-    // Explicit "disabled for these models" tag (issue #85): a family the account
-    // can't serve even while it is otherwise active. A spent shared 5h blocks
-    // everything and is already conveyed by the Ses bar + status, so it's not
-    // repeated here.
-    //
-    // limFor, not thresholdFor: it is min(per-bucket threshold, per-account cap),
-    // so the tag covers both ceilings and still judges each family against its
-    // OWN configured threshold.
-    const blocked = blockedFamilies(q, limFor);
-    if (blocked.length) line += `  ${red('⊘ ' + blocked.join(' '))}`;
-    // Money tag last, so it sits at the end of the row where the eye lands after
-    // the bars. Red once real money has moved, yellow while it only could.
-    const money = spendTag(q, a.maxSpend);
-    // Red once real money has moved (the tag then carries an amount), yellow
-    // while it only could (a bare `$`, with or without its `/cap`).
-    if (money) line += `  ${(/\d/.test(money.split('/')[0]) ? red : yellow)(money)}`;
-    // Extra-usage fallback: allowed reads yellow like a bare `$`; serving on
-    // it is billing now, so red like a billed amount.
-    const xu = extraUsageTag(a.allowExtraUsage === true, this._onExtraUsage(a));
-    if (xu) line += `  ${(xu === 'xu!' ? red : yellow)(xu)}`;
-    // Free reset credits sit beside the money tag: both report what this
-    // account holds in reserve rather than what it is currently spending.
-    const credits = resetCreditTag(q);
-    if (credits) line += `  ${cyan(credits)}`;
-    // Switch-threshold tag (issue #409) trails everything else: it is a config
-    // fact about the account, not a live state like the two tags above it, and
-    // it is silent for the common case (no override, or one that just repeats
-    // the fleet's own numbers) — see switchThresholdTag.
-    const switchTag = switchThresholdTag(a, key => this.am.thresholdFor(key));
-    if (switchTag) line += `  ${cyan(switchTag)}`;
-    // Routing tag trails even that: where the account's traffic physically
-    // leaves the machine, when the operator pinned it to its own proxy.
-    const routeTag = routingTag(a);
-    if (routeTag) line += `  ${cyan(routeTag)}`;
+    for (const tag of tags) line += `  ${tag}`;
     return line;
   }
 
