@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AccountManager } from '../src/account-manager.js';
-import { TUI, blockedFamilies, switchThresholdTag, routingTag } from '../src/tui.js';
+import { TUI, blockedFamilies, switchThresholdTag, routingTag, displayWidth } from '../src/tui.js';
+import { renderFrame } from '../test-helpers/tui-frame.js';
 
 // The account row is laid out against a width budget. The budget used to count
 // only the first two bars, so the S7/F7 bars a Fable/Sonnet fleet draws ran past
@@ -75,7 +76,7 @@ function renderRows(width, { fable = [], sonnet = [], accounts = 6, routes = [],
   return drawn;
 }
 
-const widest = rows => Math.max(...rows.map(r => r.length));
+const widest = rows => Math.max(...rows.map(displayWidth));
 
 // Widths worth pinning: the showBoth cutoff, a typical half-screen terminal, and
 // wide. Below 70 the layout drops to a single bar, which these also cover.
@@ -112,23 +113,64 @@ test('the row fills the width instead of stopping short', () => {
   }
 });
 
-test('the ⊘ tag gets its own room rather than being cut off', () => {
-  // A blocked family adds a trailing tag. It must be budgeted for, not overrun.
-  for (const w of [80, 86, 100, 120]) {
-    const rows = renderRows(w, { fable: [0.99, 0.29, 0.02, 0.0, 0.99, 0.0] });
+test('the blocked tag gets room only when its family bars are omitted', () => {
+  for (const w of [70, 76, 80, 86, 100, 120]) {
+    const rows = renderRows(w, { fable: [0.99, 0.29, 0.02, 0.0, 0.99, 0.0], sonnet: Array(6).fill(0.2) });
     assert.ok(widest(rows) <= w, `W=${w}: widest row is ${widest(rows)} columns`);
     const tagged = rows.filter(r => r.includes('⊘ Fable'));
-    assert.equal(tagged.length, 2, `W=${w}: both blocked accounts keep a whole tag`);
+    assert.equal(tagged.length, rows.some(r => r.includes('F7')) ? 0 : 2,
+      `W=${w}: only omitted family bars need a whole blocked tag`);
   }
 });
 
 test('family bars are dropped, not truncated, when they cannot fit', () => {
-  // At 70 columns with a blocked family there is no room for a third bar even at
-  // the minimum width. Dropping it keeps the row intact; the tag still says why.
-  const rows = renderRows(70, { fable: [0.99, 0.99, 0.99, 0.99, 0.99, 0.99] });
+  // Four bars cannot fit at 70 columns even without the blocked tag reserve.
+  // Dropping the family bars keeps the row intact; the tag still says why.
+  const rows = renderRows(70, { fable: Array(6).fill(0.99), sonnet: Array(6).fill(0.2) });
   assert.ok(widest(rows) <= 70, `widest row is ${widest(rows)} columns`);
   assert.ok(!rows.some(r => r.includes('F7')), 'the F7 bar is omitted rather than cut');
   assert.ok(rows.every(r => r.includes('⊘ Fable')), 'the blocked tag still explains the state');
+});
+
+test('blocked family tags follow actual bar visibility at every width from 40 to 160', () => {
+  for (let w = 40; w <= 160; w++) {
+    const { rows } = renderFrame(w);
+    const alice = [rows.find(r => r.idx === 0).out].flat().map(strip);
+    const visible = alice.some(line => line.includes('F7'));
+    assert.equal(alice.some(line => line.includes('⊘ Fable')), !visible, `W=${w}: ${alice.join('\n')}`);
+    for (const row of rows) {
+      for (const line of [row.out].flat()) {
+        assert.ok(displayWidth(line) <= w, `W=${w}: ${displayWidth(line)} columns: ${strip(line)}`);
+      }
+    }
+  }
+});
+
+test('visible family bars receive the blocked tag budget at their first fitting width', () => {
+  const { tui } = renderFrame(160);
+  const a = tui.am.accounts[0];
+  // renderFrame restores its frozen clock before returning. Keep these quota
+  // readings current while getRoutes previews routing below.
+  for (const key of ['unified5hReset', 'unified7dReset', 'unified7dSonnetReset', 'unified7dFableReset']) {
+    a.quota[key] = Date.now() + 7 * 86400_000;
+  }
+  a.quota.unified7dFableSeenAt = Date.now();
+  // Equal quota shapes with and without a block must have the same complete
+  // layout: no tag reserve, no delayed family bars, and no shorter bars.
+  a.quota.unified7dFable = 0.2;
+  let checked = 0;
+  for (let w = 70; w <= 160; w++) {
+    const free = tui._listLayout([0], w, { measure: true });
+    const freeBudget = free.budgets.get('unified');
+    if (!freeBudget.showFamily) continue;
+    a.quota.unified7dFable = 0.99;
+    const blocked = tui._listLayout([0], w, { measure: true });
+    assert.deepEqual(blocked.budgets.get('unified'), freeBudget, `W=${w}: a visible family lost tag columns`);
+    assert.equal(blocked.nameW, free.nameW, `W=${w}: a visible family lost name columns`);
+    a.quota.unified7dFable = 0.2;
+    checked++;
+  }
+  assert.ok(checked > 0, 'the sweep exercises complete family-bar layouts');
 });
 
 test('blockedFamilies reports the families barred by their own weekly bucket', () => {
@@ -192,8 +234,7 @@ test('the switch tag gets its own room rather than being cut off', () => {
 // The `⊘ Sonnet Fable` tag is 16 columns, and until #234 nothing checked that
 // what the reservations left could still afford BAR_MIN per bar: `showBoth` was
 // a bare `W >= 70`, and the bar-width floor then overrode the budget. The
-// fixtures above never produce this because every family bucket in them is far
-// below the threshold — they only ever draw the 9-column `⊘ Fable`.
+// fallback must still reserve this tag when neither family bar fits.
 const SPENT = 0.99;   // over the 0.98 switch threshold, so the family is barred
 
 test('a row blocked on BOTH families does not overflow', () => {
@@ -271,7 +312,8 @@ test('rows line up within their category, not across categories', () => {
 test('a blocked family on a subscription row does not shorten the API-key rows', () => {
   for (const w of UNCAPPED) {
     const rows = renderRows(w, { fable: [null, 0.99, 0.02, null, 0.11, 0.0], apikey: [0, 3] });
-    assert.ok(rows.some(r => r.includes('⊘ Fable')), 'the fixture blocks a family');
+    const blocked = rows.find(r => r.includes('acct1@'));
+    assert.ok(blocked.includes('F7') || blocked.includes('⊘ Fable'), 'the blocked family remains visible');
     assert.ok(widest(rows) <= w, `W=${w}: widest row is ${widest(rows)} columns`);
     const metered = rows.filter(isMetered);
     assert.ok(w - widest(metered) <= 3, `W=${w}: the tag cost the API-key rows ${w - widest(metered)} columns`);

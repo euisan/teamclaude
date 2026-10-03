@@ -3,7 +3,8 @@
 // drop every bar past the first and then shrink that one to a couple of cells;
 // it now folds each account into a heading line and one line per bar, each bar
 // stopping two columns short of the right edge. At 70 columns and wider the
-// frame is unchanged, byte for byte.
+// frame is the one 1.1.23 drew, except that a blocked family whose bar is
+// drawn no longer gets a ⊘ tag and its columns go to the bars.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,8 +28,8 @@ function folded(/** @type {number} */ width, /** @type {any} */ opts = {}) {
   return { buf, accounts: rows.map(r => /** @type {string[]} */ (r.out)), lines: frameLines(buf) };
 }
 
-test('at 70 columns and wider the frame is byte-identical to the one 1.1.23 drew', () => {
-  // Recorded from the unmodified 1.1.23 renderer with the same fleet and clock.
+test('at 70 columns and wider the frame matches the recorded one, tagged only for omitted family bars', () => {
+  // Recorded with visibility-based tags (percentage off, the 1.1.23 default), using the same fleet and clock.
   const recorded = JSON.parse(readFileSync(new URL('./fixtures/tui-wide-frames.json', import.meta.url), 'utf8'));
   for (const [w, frame] of Object.entries(recorded)) {
     assert.equal(renderFrame(Number(w)).buf, frame, `W=${w}: the wide frame changed`);
@@ -42,8 +43,9 @@ test('below 70 columns each account folds into a heading and one line per quota 
     const [alice, wide, metered, codex] = accounts;
     assert.match(strip(alice[0]), /^ {2}► alice@exa\S* +Anthropic active$/);
     assert.deepEqual(alice.slice(1, 5).map(labelOf), ['Ses', 'Wk', 'S7', 'F7'], `W=${w}: both family bars are kept`);
-    assert.match(strip(alice[5]), /^ {4}⊘ Fable {2}xu *$/, `W=${w}: the tags follow the bars`);
+    assert.match(strip(alice[5]), /^ {4}xu *$/, `W=${w}: the tags follow the bars`);
     assert.equal(alice.length, 6);
+    assert.ok(alice.every(line => !strip(line).includes('⊘')), `W=${w}: visible family bars replace the blocked tag`);
     assert.deepEqual(wide.slice(1).map(labelOf), ['Ses', 'Wk'], `W=${w}: the weekly bar is no longer dropped`);
     assert.deepEqual(metered.slice(1).map(labelOf), ['Tok', 'Req']);
     // A Codex seat that states no five-hour window draws its weekly bar alone,
@@ -128,7 +130,7 @@ test('tags that do not fit one line wrap onto the next, whole', () => {
     const tagLines = alice.slice(5).map(strip);
     for (const line of alice.slice(5)) assert.ok(displayWidth(line) <= w, `W=${w}: ${strip(line)}`);
     const tags = tagLines.join('  ');
-    for (const tag of ['⊘ Fable', 'xu', 'switch at 50%']) assert.ok(tags.includes(tag), `W=${w}: "${tag}" is cut`);
+    for (const tag of ['xu', 'switch at 50%']) assert.ok(tags.includes(tag), `W=${w}: "${tag}" is cut`);
     assert.ok(tags.includes('via socks5h://'), `W=${w}: the routing tag starts`);
     if (w <= 40) assert.ok(tagLines.length > 1, `W=${w}: the tags wrapped`);
   }
