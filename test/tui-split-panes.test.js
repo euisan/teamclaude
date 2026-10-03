@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AccountManager } from '../src/account-manager.js';
-import { TUI } from '../src/tui.js';
+import { TUI, displayWidth } from '../src/tui.js';
 import { RemoteAccountManager } from '../src/tui-remote.js';
 
 const strip = s => s.replace(/\x1b\[[0-9;]*m/g, '');
@@ -111,7 +111,7 @@ test('the split costs no height: the titles sit in the spacer line', () => {
 
 test('it splits only when both panes draw every bar the one-column list draws', () => {
   const am = fleet([claude('a@x.com'), claude('b@x.com'), codex('k1@x.com'), codex('k2@x.com')]);
-  am.accounts[1].quota.unified7dFable = 0.995; // a blocked family: F7 bar plus a `⊘ Fable` tag
+  am.accounts[1].quota.unified7dFable = 0.995; // a blocked family: the F7 bar replaces its tag
   let first = null;
   for (let w = 100; w <= 200; w++) {
     const { lines, drawn } = screen(am, w);
@@ -122,11 +122,40 @@ test('it splits only when both panes draw every bar the one-column list draws', 
     first ??= w;
     for (const row of drawn.filter(r => am.accounts[r.idx].provider !== 'codex')) {
       assert.match(row.text, /F7/, `W=${w}: the pane dropped a family bar the list draws: ${row.text}`);
+      assert.doesNotMatch(row.text, /⊘/, `W=${w}: a visible family has a redundant blocked tag`);
     }
     // And never so narrow that a bar cuts its reset label (`10h23m` needs 6 plus a cell).
     for (const row of drawn) assert.ok(row.bw >= 8, `W=${w}: a pane bar is ${row.bw} wide: ${row.text}`);
   }
   assert.ok(first != null && first < 200, 'some width in the sweep splits');
+});
+
+test('pane stages and the first split width spend no columns on visible blocked tags', () => {
+  const am = fleet([claude('a-long-name@example.com'), codex('k1@x.com')]);
+  const { tui } = screen(am, 160);
+  const groups = tui._providerGroups();
+  const freeStages = [40, 62, 100].map(w => tui._listLayout([0], w, { pane: 'claude', measure: true }).stages);
+  let first = null;
+  for (let w = 100; w <= 200; w++) {
+    if (tui._splitLayout(groups, w)) { first = w; break; }
+  }
+  assert.ok(first != null, 'a complete split fits within the sweep');
+  const free = tui._splitLayout(groups, first);
+  am.accounts[0].quota.unified7dFable = 0.995;
+  for (const [i, w] of [40, 62, 100].entries()) {
+    assert.deepEqual(tui._listLayout([0], w, { pane: 'claude', measure: true }).stages, freeStages[i],
+      `W=${w}: measuring pane stages reserved a redundant blocked tag`);
+  }
+  const blocked = tui._splitLayout(groups, first);
+  assert.ok(blocked, 'the blocked family splits at the same first fitting width');
+  assert.equal(blocked.leftW, free.leftW);
+  assert.deepEqual(blocked.left.budgets.get('unified'), free.left.budgets.get('unified'));
+  const { drawn } = screen(am, first);
+  assert.ok(drawn.every(r => r.pane), 'the real renderer uses the complete panes');
+  for (const row of drawn) {
+    assert.ok(displayWidth(row.text) <= row.width, `pane overflow: ${row.text}`);
+    assert.doesNotMatch(row.text, /⊘/, 'visible family bars need no blocked tag');
+  }
 });
 
 test('no row outgrows its pane or the terminal, across widths', () => {
@@ -141,7 +170,7 @@ test('no row outgrows its pane or the terminal, across widths', () => {
   for (let w = 60; w <= 240; w += 3) {
     const { drawn } = screen(am, w);
     for (const row of drawn) {
-      assert.ok(row.text.length <= row.width, `W=${w} ${row.pane ? 'pane' : 'list'} row is ${row.text.length} > ${row.width}: ${row.text}`);
+      assert.ok(displayWidth(row.text) <= row.width, `W=${w} ${row.pane ? 'pane' : 'list'} row is ${displayWidth(row.text)} > ${row.width}: ${row.text}`);
     }
     const panes = drawn.filter(r => r.pane);
     if (panes.length) {
@@ -154,7 +183,7 @@ test('no row outgrows its pane or the terminal, across widths', () => {
 });
 
 test('the width goes to whole names before wider bars, and to the pane that needs it', () => {
-  // Three bars and a blocked tag on the left, two bars on the right: an even split
+  // Three bars on the left, two bars on the right: an even split
   // cut the left names while the right pane padded.
   const am = fleet([
     claude('someone.long@example.com'), claude('another.long@example.com'),

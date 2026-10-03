@@ -266,7 +266,7 @@ test('no recovery time is shown when a blocking bucket has no reset', () => {
     `an unknown recovery time was printed as a duration anyway: ${row}`);
 });
 
-test('the TUI blocked tag follows the gate, not the family bucket', () => {
+test('the TUI blocked tag follows the gate when the family bar is omitted', () => {
   // Same question, third rendering (issue #85's ⊘ tag). An account under its
   // family cap but over the shared one carried no tag while routing refused it.
   const now = Date.now();
@@ -277,7 +277,7 @@ test('the TUI blocked tag follows the gate, not the family bucket', () => {
   });
   const tui = rowTUI(am);
   tui.mode = 'normal'; tui.selIdx = -1;
-  const row = stripAnsi(tui._renderAcct(0, 8, true, am.getRoutes(), [], { fable: null, sonnet: null }));
+  const row = stripAnsi(tui._renderAcct(0, 8, true, am.getRoutes(), [], { fable: null, sonnet: null }, false));
   assert.equal(am._isAvailable(am.accounts[0], FABLE), false);
   assert.match(row, /⊘ Fable/,
     `routing refuses Fable on this account but the TUI shows no blocked tag: ${row}`);
@@ -292,9 +292,28 @@ test('the TUI blocked tag stays off when the account can still serve the family'
   });
   const tui = rowTUI(am);
   tui.mode = 'normal'; tui.selIdx = -1;
-  const row = stripAnsi(tui._renderAcct(0, 8, true, am.getRoutes(), [], { fable: null, sonnet: null }));
+  const row = stripAnsi(tui._renderAcct(0, 8, true, am.getRoutes(), [], { fable: null, sonnet: null }, false));
   assert.equal(am._isAvailable(am.accounts[0], FABLE), true);
   assert.equal(/⊘/.test(row), false, `a servable family was tagged blocked: ${row}`);
+});
+
+test('the TUI omits the blocked tag with a visible family bar for either weekly gate', () => {
+  for (const quota of [
+    { unified7d: 0.99, unified7dFable: 0.05 },
+    { unified7d: 0.1, unified7dFable: 0.99 },
+  ]) {
+    const now = Date.now();
+    const am = managerWith({
+      ...quota, unified5h: 0.1, unified5hReset: now + 3600_000,
+      unified7dReset: now + 3600_000, unified7dFableReset: now + 3600_000,
+    });
+    const tui = rowTUI(am);
+    tui.mode = 'normal'; tui.selIdx = -1;
+    const row = stripAnsi(tui._renderAcct(0, 8, true, am.getRoutes(), [], {}));
+    assert.equal(am._isAvailable(am.accounts[0], FABLE), false);
+    assert.match(row, /F7/);
+    assert.doesNotMatch(row, /⊘/, `a visible family has a redundant blocked tag: ${row}`);
+  }
 });
 
 // The regression. A spent family reading is cleared so it can be revalidated,
