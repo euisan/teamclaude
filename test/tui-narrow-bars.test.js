@@ -101,7 +101,7 @@ test('the folded heading spends what the type and status leave on the name, in d
 
 // The percentage is opt-in (config `quotaBarPercent`), so it is switched on here.
 test('every folded bar keeps its whole percentage and countdown', () => {
-  const labels = ['42% · 4h', '31% · 2d', '20% · 3d', '99% · 3d', '75% · 1h30m', '60% · 5d', '40% · 1h', '30% · 1h', '50% · 6d'];
+  const labels = ['42% 4h', '31% 2d', '20% 3d', '99% 3d', '75% 1h30m', '60% 5d', '40% 1h', '30% 1h', '50% 6d'];
   for (const w of NARROW) {
     const text = folded(w, { config: { quotaBarPercent: true } }).lines.map(strip).join('\n');
     for (const label of labels) assert.ok(text.includes(label), `W=${w}: "${label}" is missing`);
