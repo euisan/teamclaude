@@ -3,7 +3,7 @@
 // drop every bar past the first and then shrink that one to a couple of cells;
 // it now folds each account into a heading line and one line per bar, each bar
 // stopping two columns short of the right edge. At 70 columns and wider the
-// frame is unchanged, byte for byte.
+// frame uses compact bar labels.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,8 +27,8 @@ function folded(/** @type {number} */ width, /** @type {any} */ opts = {}) {
   return { buf, accounts: rows.map(r => /** @type {string[]} */ (r.out)), lines: frameLines(buf) };
 }
 
-test('at 70 columns and wider the frame is byte-identical to the one 1.1.22 drew', () => {
-  // Recorded from the unmodified 1.1.22 renderer with the same fleet and clock.
+test('at 70 columns and wider the frame matches the recorded compact bar labels', () => {
+  // Recorded with compact bar labels, using the same fleet and clock.
   const recorded = JSON.parse(readFileSync(new URL('./fixtures/tui-wide-frames.json', import.meta.url), 'utf8'));
   for (const [w, frame] of Object.entries(recorded)) {
     assert.equal(renderFrame(Number(w)).buf, frame, `W=${w}: the wide frame changed`);
@@ -100,7 +100,7 @@ test('the folded heading spends what the type and status leave on the name, in d
 });
 
 test('every folded bar keeps its whole percentage and countdown', () => {
-  const labels = ['42% · 4h', '31% · 2d', '20% · 3d', '99% · 3d', '75% · 1h30m', '60% · 5d', '40% · 1h', '30% · 1h', '50% · 6d'];
+  const labels = ['42% 4h', '31% 2d', '20% 3d', '99% 3d', '75% 1h30m', '60% 5d', '40% 1h', '30% 1h', '50% 6d'];
   for (const w of NARROW) {
     const text = folded(w).lines.map(strip).join('\n');
     for (const label of labels) assert.ok(text.includes(label), `W=${w}: "${label}" is missing`);

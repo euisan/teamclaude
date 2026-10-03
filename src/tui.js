@@ -520,18 +520,17 @@ export function bar(ratio, w = 10, resetTs, windowMs, threshold, showPct = true)
   const f = Math.round(ratio * w);
   const { bg, fg } = barColor(ratio, resetTs, windowMs, threshold);
 
-  // Both fields when the bar is wide enough to hold them, `97% · 2h30m`, and
+  // Both fields when the bar is wide enough to hold them, `97% 2h30m`, and
   // the countdown alone when it is not: the countdown is what the width budget
   // already treats as load-bearing (a row cut mid-bar "loses the reset countdown
   // its tail carries", see the backstop in the row renderer), so the percentage
   // is the field that yields. From BAR_MIN up the label is therefore one field
   // entire or the other, never half of one — half a countdown reads as a
   // different number, not a shorter one; below BAR_MIN the slice that follows
-  // still cuts it, as it did before. The other two quota readouts already draw
-  // both values in this order — the ` · ` between them is the dashboard's
-  // (src/dashboard.js).
+  // still cuts it, as it did before. A single space between the fields keeps
+  // the TUI label compact; the other quota readouts keep their own separators.
   const pct = (ratio * 100).toFixed(0) + '%';
-  const both = showPct && rst ? `${pct} · ${rst}` : '';
+  const both = showPct && rst ? `${pct} ${rst}` : '';
   const label = both && vw(both) <= w ? both : (rst || pct);
   const text = label.slice(0, w);
   const pad = w - text.length;
