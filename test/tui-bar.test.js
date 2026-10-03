@@ -104,20 +104,19 @@ const H = 3600_000;
  *  `6d23h`. */
 const inTwoAndAHalfHours = () => Date.now() + 2.5 * H;
 
-test('a wide bar carries the percentage and the countdown, separated by a dot', () => {
-  assert.equal(plain(bar(0.97, 20, inTwoAndAHalfHours())), '97% \u00b7 2h30m');
+test('a wide bar carries the percentage and the countdown, separated by one space', () => {
+  assert.equal(plain(bar(0.97, 20, inTwoAndAHalfHours())), '97% 2h30m');
 });
 
-// The widest label this produces is 12 columns, so the widest bars are the ones
-// that show both — and a bar at the default width does not. That is the price
-// of the house separator, and it is the one the fallback exists to pay.
+// The longest percentage and countdown take ten columns with one space.
+// Their exact boundary also catches a regression to the wider dot separator.
 test('a bar exactly wide enough for both keeps both', () => {
-  assert.equal(plain(bar(1, 12, inTwoAndAHalfHours())), '100% \u00b7 2h30m');
+  assert.equal(plain(bar(1, 10, inTwoAndAHalfHours())), '100% 2h30m');
 });
 
 test('one column short, the percentage yields and the countdown stays whole', () => {
-  assert.equal(plain(bar(1, 11, inTwoAndAHalfHours())), '2h30m');
-  assert.equal(plain(bar(0.97, 10, inTwoAndAHalfHours())), '2h30m');
+  assert.equal(plain(bar(1, 9, inTwoAndAHalfHours())), '2h30m');
+  assert.equal(plain(bar(0.97, 8, inTwoAndAHalfHours())), '2h30m');
 });
 
 // Every width the row budget hands a bar, BAR_MIN through BAR_MAX. Whatever is
@@ -128,7 +127,7 @@ test('one column short, the percentage yields and the countdown stays whole', ()
 test('no width from BAR_MIN up produces a half-drawn countdown', () => {
   for (let w = 5; w <= 20; w++) {
     const label = plain(bar(0.97, w, inTwoAndAHalfHours()));
-    assert.ok(label === '97% \u00b7 2h30m' || label === '2h30m',
+    assert.ok(label === '97% 2h30m' || label === '2h30m',
       `width ${w} drew "${label}", which is neither field whole`);
   }
 });
@@ -198,7 +197,7 @@ test('the row carries the percentage on every bar only when the switch is on', (
     unified7dSonnet: 0.22, unified7dSonnetReset: Date.now() + 3 * 24 * h,
     unified7dFable: 0.11, unified7dFableReset: Date.now() + 3 * 24 * h,
   };
-  assert.match(plain(renderRow(quota, 0.98, { quotaBarPercent: true })), /31% \u00b7 3d/);
+  assert.match(plain(renderRow(quota, 0.98, { quotaBarPercent: true })), /31% 3d/);
   const off = plain(renderRow(quota));
   assert.doesNotMatch(off, /%/);
   assert.doesNotMatch(plain(renderRow(quota, 0.98, { quotaBarPercent: false })), /%/);
