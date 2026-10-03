@@ -2298,9 +2298,8 @@ export class TUI {
     //   - the fixed prefix (marker, name, type, status, first bar label),
     //   - the route-marker cells, one per general route,
     //   - 6 columns of label for each bar past the first (`  Wk `, ` ►F7  `).
-    // The `⊘ Sonnet Fable` tag is reserved for only when some account is
-    // actually blocked; the common case where nothing is spends those columns
-    // on the bars instead of leaving the row short of the edge.
+    // The `⊘ Sonnet Fable` tag is reserved only when a blocked family's bar
+    // is omitted; visible family bars spend those columns on the bars instead.
     const categoryOf = (/** @type {any} */ a) => rowCategory(a);
     const routeCells = genRoutes.length ? genRoutes.length + 1 : 0;
     // The type cell and the space after it, at the width the row pads it to.
@@ -2342,7 +2341,13 @@ export class TUI {
         const tag = routingTag(a);
         return tag ? Math.max(w, 2 + vw(tag)) : w;
       }, 0);
-      const fixed = 20 + typeCell + NAME_MIN + routeCells + tagW + spendW + switchW + routeW;
+      const base = 20 + typeCell + NAME_MIN + routeCells + spendW + switchW + routeW;
+      // Try the complete family-bar layout without its redundant blocked tag
+      // first. Only the fallback reserves that tag, breaking the dependency
+      // between tag width and family visibility without iterative decisions.
+      const familySpan = (/** @type {number} */ n, /** @type {number} */ bar) => base + 6 * (n - 1) + n * bar;
+      const showFamily = W >= floor && families > 0 && familySpan(2 + families, BAR_MIN) <= W;
+      const fixed = base + (showFamily ? 0 : tagW);
       const span = (/** @type {number} */ n, /** @type {number} */ bar) => fixed + 6 * (n - 1) + n * bar;
       const roomFor = (/** @type {number} */ n) => span(n, BAR_MIN) <= W;
       // No Ses bar once every Codex account here has said it meters no 5h window
@@ -2362,7 +2367,6 @@ export class TUI {
       // accounts blocked on both families drew 72 columns at W=70, which
       // fitLine silently cut (#234).
       const showBoth = W >= floor && roomFor(2);
-      const showFamily = showBoth && families > 0 && roomFor(2 + families);
       const nbars = (showBoth && shortBar ? 2 : 1) + (showFamily ? families : 0);
       // Backstop for the case no count of bars can fix: when even one bar at
       // BAR_MIN overruns the row, the floor has to yield. A narrow bar reads
@@ -2382,9 +2386,12 @@ export class TUI {
       const drawn = (shortBar ? 2 : 1) + families;
       // The first step also holds what showBoth and showFamily test, so a
       // width that reaches it draws every bar.
-      const s1 = Math.max(floor, span(2 + families, BAR_MIN), span(drawn, PANE_BAR_FLOOR));
-      const s2 = Math.max(s1, span(drawn, PANE_BAR_FLOOR) + nameWant);
-      const s3 = Math.max(s2, span(drawn, BAR_MAX) + nameWant);
+      // Complete panes draw every family bar, so their stages never reserve
+      // the hidden-family tag, even when measuring from a fallback width.
+      const completeSpan = families > 0 ? familySpan : span;
+      const s1 = Math.max(floor, completeSpan(2 + families, BAR_MIN), completeSpan(drawn, PANE_BAR_FLOOR));
+      const s2 = Math.max(s1, completeSpan(drawn, PANE_BAR_FLOOR) + nameWant);
+      const s3 = Math.max(s2, completeSpan(drawn, BAR_MAX) + nameWant);
       return {
         bw, showBoth, showFamily, anyFable, anySonnet, slack, shortBar,
         complete: showBoth && (families === 0 || showFamily),
@@ -2724,12 +2731,13 @@ export class TUI {
     // Explicit "disabled for these models" tag (issue #85): a family the account
     // can't serve even while it is otherwise active. A spent shared 5h blocks
     // everything and is already conveyed by the Ses bar + status, so it's not
-    // repeated here.
+    // repeated here. A visible family bar already conveys its state; keep
+    // the tag only for blocked families whose bars are actually omitted.
     //
     // limFor, not thresholdFor: it is min(per-bucket threshold, per-account cap),
     // so the tag covers both ceilings and still judges each family against its
     // OWN configured threshold.
-    const blocked = blockedFamilies(q, limFor);
+    const blocked = blockedFamilies(q, limFor).filter(fam => !barShown(fam.toLowerCase()));
     if (blocked.length) tags.push(red('⊘ ' + blocked.join(' ')));
     // Money tag last, so it sits at the end of the row where the eye lands after
     // the bars. Red once real money has moved, yellow while it only could.
